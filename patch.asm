@@ -79,7 +79,8 @@ FROM BANK1_FREE
 label_y:
     LDA player_state
     CMP #$04 ; attacking
-    BEQ ++
+    BEQ check_attack_substate
+    do_normal_knockback_facing:
     LDY #$00
     ; compare enemy's x position and player's x position
     LDA player_x,X
@@ -89,8 +90,25 @@ label_y:
     +
     STY player_facing
     JMP set_player_knockback
-    
-    ++
+
+    check_attack_substate:
+    ; BUGFIX: previously this unconditionally forced player_state to 9
+    ; ("on stairs") whenever the player was hit while attacking (state 4),
+    ; regardless of what the player was actually doing before the attack
+    ; began. If the player was airborne and using a subweapon (e.g. holy
+    ; water) when hit by a projectile, this incorrectly forced them into
+    ; a broken, invisible "stairs" state -- movement got locked to
+    ; stairs-only directions and the attack animation looped, with no
+    ; actual stairs present. Landing or jumping was the only way out.
+    ;
+    ; player_substate already stores what player_state was before the
+    ; attack began ("stores state when also attacking", see defs.asm).
+    ; So: only force player_state back to 9 if the player was genuinely
+    ; on stairs (player_substate == 9) before attacking. Otherwise, treat
+    ; the hit as ordinary knockback, same as any other airborne/grounded hit.
+    LDA player_substate
+    CMP #$09
+    BNE do_normal_knockback_facing
     LDA #$09 ; is on stairs?
     STA player_state
     JMP continue_knockback
@@ -272,7 +290,16 @@ custom_stair_logic:
     ; player can jump from the stairs.
     LDA button_pressed
     AND #$80 ; jump button pressed?
-    BNE do_jump_from_stairs
+    BEQ jmp_to_player_step_stair
+    ; NEW FEATURE: if Down is also currently held, drop through the
+    ; stairs (fall) instead of jumping upward. This lets the player
+    ; press Down+Jump on stairs to quickly descend, matching the
+    ; behavior added by Bisqwit's own down+A patch, but implemented
+    ; independently here (does not depend on or conflict with it).
+    LDA button_down
+    AND #$04 ; down held?
+    BEQ do_jump_from_stairs
+    JMP do_drop_from_stairs
 jmp_to_player_step_stair:
     ; jump to the appropriate step handler (9 or A)
     LDA player_state
@@ -289,7 +316,30 @@ do_jump_from_stairs:
     STA player_air_xspeed
     STA player_xspeed_frac
     JMP do_jump
-    
+
+do_drop_from_stairs:
+    ; Transition the player into the falling state, same as walking off
+    ; a ledge, instead of jumping upward.
+    ;
+    ; NOTE: the two JSRs below call pre-existing vanilla routines that
+    ; are not otherwise given names in this file:
+    ;   $D3C0 - sets Simon's "automatic" sprite pose from a small table
+    ;           indexed by the value in A (also checks whether a bone
+    ;           key item is held); used elsewhere when Simon starts
+    ;           falling.
+    ;   $877A - called at the start of several player_state transitions
+    ;           (e.g. also used when initiating an attack); exact
+    ;           purpose not fully characterized, included here to match
+    ;           the same sequence used by comparable state transitions
+    ;           elsewhere in the base game.
+    ; If either of these already has a proper label elsewhere in this
+    ; project, please use that instead of the raw address.
+    LDA #$01
+    JSR $D3C0
+    JSR $877A
+    LDA #$05 ; falling
+    JMP $DEBD ; sets player_state (via an X-indexed helper, X=0 here) and returns
+
 hitstun:
     BEQ end_hitstun
 force_hitstun:
