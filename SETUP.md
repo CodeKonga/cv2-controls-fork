@@ -15,9 +15,6 @@ add `base-bisqwit.nes` (just apply bisqwit's retranslation to `base.nes`).
 Then run `./build.sh`. You will need bash to do this. On windows, if you have [git installed](https://git-scm.com/download/win), you may be able to run `./build.sh` from your git terminal (which comes with bash).
 You should see several files generated, including .ips and .nes files.
 
-Additionally, if possible, please make sure your contributions are compatible
-with this English localization hack as well:
-http://www.romhacking.net/hacks/1983/
 You can do this by applying the localization patch directly to `base.nes`.
 
 Do not commit any .nes files to the repo which are not in the public domain!
